@@ -1,0 +1,8 @@
+{
+  "revision_no": "01",
+  "part_name": "PP",
+  "hold_step_1_pct": "20 %",
+  "hold_step_2_pct": "20 %",
+  "hold_step_3_pct": "20 %",
+  "hold_step_4_pct": "20 %"
+}

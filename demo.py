@@ -2,6 +2,8 @@ import streamlit as st
 from pathlib import Path
 from io import BytesIO
 from datetime import date
+import json
+from pypdf import PdfReader
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4, landscape
@@ -13,6 +15,30 @@ from reportlab.platypus import (
 )
 
 LOGO_PATH = Path(__file__).with_name("demo.jpg")
+SUGGESTIONS_PATH = Path(__file__).with_name("process_sheet_suggestions.json")
+
+
+def load_suggestions():
+    if not SUGGESTIONS_PATH.exists():
+        return {}
+    try:
+        with SUGGESTIONS_PATH.open("r", encoding="utf-8") as file:
+            suggestions = json.load(file)
+        return suggestions if isinstance(suggestions, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_suggestions(values):
+    text_values = {
+        key: value for key, value in values.items()
+        if key not in {"issued_date"}
+        and isinstance(value, str)
+        and value
+    }
+    with SUGGESTIONS_PATH.open("w", encoding="utf-8") as file:
+        json.dump(text_values, file, indent=2)
+
 
 # ============================================================
 # PAGE CONFIG
@@ -23,6 +49,10 @@ st.set_page_config(
     page_icon="📋",
     layout="wide",
 )
+
+for suggestion_key, suggestion_value in load_suggestions().items():
+    if suggestion_key != "issued_date" and suggestion_key not in st.session_state:
+        st.session_state[suggestion_key] = suggestion_value
 
 # ============================================================
 # CSS - CLEAN 2-COLUMN FORM
@@ -164,7 +194,7 @@ def p(text, style):
 
 def build_pdf(data):
     """
-    Creates a clean multi-page A4 process-sheet PDF.
+    Creates a compact one-page A4 process-sheet PDF.
     """
 
     buffer = BytesIO()
@@ -172,10 +202,10 @@ def build_pdf(data):
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=10 * mm,
-        leftMargin=10 * mm,
-        topMargin=9 * mm,
-        bottomMargin=9 * mm,
+        rightMargin=4 * mm,
+        leftMargin=4 * mm,
+        topMargin=4 * mm,
+        bottomMargin=4 * mm,
         title="Process Sheet",
         author="Process Sheet Generator",
     )
@@ -186,28 +216,28 @@ def build_pdf(data):
         "title_custom",
         parent=styles["Title"],
         fontName="Helvetica-Bold",
-        fontSize=14,
-        leading=17,
+        fontSize=10,
+        leading=12,
         alignment=TA_CENTER,
-        spaceAfter=2,
+        spaceAfter=0,
     )
 
     subtitle_style = ParagraphStyle(
         "subtitle_custom",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=11,
-        leading=13,
+        fontSize=8,
+        leading=10,
         alignment=TA_CENTER,
-        spaceAfter=3,
+        spaceAfter=1,
     )
 
     section_style = ParagraphStyle(
         "section_custom",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=9.5,
-        leading=11,
+        fontSize=7,
+        leading=8,
         alignment=TA_CENTER,
     )
 
@@ -215,24 +245,24 @@ def build_pdf(data):
         "label_custom",
         parent=styles["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=7.5,
-        leading=9,
+        fontSize=6,
+        leading=7,
     )
 
     value_style = ParagraphStyle(
         "value_custom",
         parent=styles["Normal"],
         fontName="Helvetica",
-        fontSize=7.5,
-        leading=9,
+        fontSize=6,
+        leading=7,
     )
 
     small_style = ParagraphStyle(
         "small_custom",
         parent=styles["Normal"],
         fontName="Helvetica",
-        fontSize=6.5,
-        leading=8,
+        fontSize=5,
+        leading=6,
     )
 
     story = []
@@ -241,7 +271,7 @@ def build_pdf(data):
     # HEADER
     # --------------------------------------------------------
 
-    logo_cell = PdfImage(str(LOGO_PATH), width=24 * mm, height=24 * mm,
+    logo_cell = PdfImage(str(LOGO_PATH), width=22 * mm, height=18 * mm,
                          kind="proportional") if LOGO_PATH.exists() else ""
     header_table = Table([
         [logo_cell, [
@@ -269,17 +299,17 @@ def build_pdf(data):
         ]
     ]
 
-    t = Table(rev_data, colWidths=[25*mm, 55*mm, 30*mm, 70*mm])
+    t = Table(rev_data, colWidths=[35*mm, 55*mm, 30*mm, 70*mm])
     t.setStyle(TableStyle([
         ("GRID", (0,0), (-1,-1), 0.6, colors.black),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 5),
-        ("RIGHTPADDING", (0,0), (-1,-1), 5),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING", (0,0), (-1,-1), 2),
+        ("RIGHTPADDING", (0,0), (-1,-1), 2),
+        ("TOPPADDING", (0,0), (-1,-1), 2),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 2),
     ]))
     story.append(t)
-    story.append(Spacer(1, 4))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # GENERAL DETAILS
@@ -294,7 +324,7 @@ def build_pdf(data):
     ]
 
     story.append(make_pdf_table(general_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # PROCESS PARAMETERS
@@ -314,7 +344,7 @@ def build_pdf(data):
          "", ""],
     ]
     story.append(make_pdf_table(process_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # CLAMPING + EJECTOR
@@ -350,7 +380,7 @@ def build_pdf(data):
          data["close_slow_4_time"]],
     ]
     story.append(make_grid_table(clamp_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     story.append(make_section_table("EJECTOR SETTING", section_style))
     ejector_rows = [
@@ -369,7 +399,7 @@ def build_pdf(data):
          data["ejector_return_2_time"]],
     ]
     story.append(make_grid_table(ejector_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # CORE
@@ -383,7 +413,7 @@ def build_pdf(data):
         ["TIME", data["core_time"]],
     ]
     story.append(make_two_col_table(core_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # INJECTION
@@ -403,7 +433,7 @@ def build_pdf(data):
          data["injection_3_time"]],
     ]
     story.append(make_grid_table(injection_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # PLASTICIZING
@@ -420,7 +450,7 @@ def build_pdf(data):
          data["plastic_3_pressure"], data["plastic_3_position"]],
     ]
     story.append(make_grid_table(plastic_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # MELT / MOULD
@@ -433,7 +463,7 @@ def build_pdf(data):
          "SWITCHOVER SC STROKE", data["switchover_sc_stroke"]],
     ]
     story.append(make_pdf_table(melt_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # BARREL TEMPERATURE
@@ -449,7 +479,7 @@ def build_pdf(data):
         ["ZONE 5", data["barrel_zone_5_set"], data["barrel_zone_5_actual"]],
     ]
     story.append(make_grid_table(barrel_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     # --------------------------------------------------------
     # HOLDING PROFILE
@@ -468,13 +498,13 @@ def build_pdf(data):
          data["hold_step_4_pressure"], data["hold_step_4_time"]],
     ]
     story.append(make_grid_table(holding_rows, label_style, value_style))
-    story.append(Spacer(1, 5))
+    story.append(Spacer(1, 1))
 
     story.append(p(
         "Tolerance: +/-20 if not specified / if required.",
         small_style
     ))
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 3))
 
     # --------------------------------------------------------
     # SIGN-OFF
@@ -484,7 +514,7 @@ def build_pdf(data):
         ["PREPARED BY", data["prepared_by"], "APPROVED BY", data["approved_by"]],
     ]
     story.append(make_pdf_table(sign_rows, label_style, value_style))
-    story.append(Spacer(1, 15))
+    story.append(Spacer(1, 2))
 
     signature_rows = [
         ["Signature", "", "Signature", ""],
@@ -513,7 +543,10 @@ def build_pdf(data):
     )
 
     buffer.seek(0)
-    return buffer.getvalue()
+    pdf_bytes = buffer.getvalue()
+    if len(PdfReader(BytesIO(pdf_bytes)).pages) != 1:
+        raise ValueError("The process sheet could not fit on one page.")
+    return pdf_bytes
 
 
 def make_section_table(title, style):
@@ -522,8 +555,8 @@ def make_section_table(title, style):
         ("BACKGROUND", (0,0), (-1,-1), colors.HexColor("#e5e7eb")),
         ("BOX", (0,0), (-1,-1), 0.7, colors.black),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("TOPPADDING", (0,0), (-1,-1), 1),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 1),
     ]))
     return t
 
@@ -545,10 +578,10 @@ def make_pdf_table(rows, label_style, value_style):
     t.setStyle(TableStyle([
         ("GRID", (0,0), (-1,-1), 0.6, colors.black),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 4),
-        ("RIGHTPADDING", (0,0), (-1,-1), 4),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING", (0,0), (-1,-1), 2),
+        ("RIGHTPADDING", (0,0), (-1,-1), 2),
+        ("TOPPADDING", (0,0), (-1,-1), 1),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 1),
         ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#f3f4f6")),
         ("BACKGROUND", (2,0), (2,-1), colors.HexColor("#f3f4f6")),
     ]))
@@ -567,10 +600,10 @@ def make_two_col_table(rows, label_style, value_style):
     t.setStyle(TableStyle([
         ("GRID", (0,0), (-1,-1), 0.6, colors.black),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-        ("LEFTPADDING", (0,0), (-1,-1), 4),
-        ("RIGHTPADDING", (0,0), (-1,-1), 4),
-        ("TOPPADDING", (0,0), (-1,-1), 5),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+        ("LEFTPADDING", (0,0), (-1,-1), 2),
+        ("RIGHTPADDING", (0,0), (-1,-1), 2),
+        ("TOPPADDING", (0,0), (-1,-1), 1),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 1),
         ("BACKGROUND", (0,0), (0,-1), colors.HexColor("#f3f4f6")),
     ]))
     return t
@@ -603,10 +636,10 @@ def make_grid_table(rows, label_style, value_style):
         ("GRID", (0,0), (-1,-1), 0.6, colors.black),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("ALIGN", (1,1), (-1,-1), "CENTER"),
-        ("LEFTPADDING", (0,0), (-1,-1), 3),
-        ("RIGHTPADDING", (0,0), (-1,-1), 3),
-        ("TOPPADDING", (0,0), (-1,-1), 4),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
+        ("LEFTPADDING", (0,0), (-1,-1), 1),
+        ("RIGHTPADDING", (0,0), (-1,-1), 1),
+        ("TOPPADDING", (0,0), (-1,-1), 1),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 1),
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#e5e7eb")),
     ]))
     return t
@@ -640,9 +673,9 @@ section("DOCUMENT DETAILS")
 
 c1, c2 = st.columns(2)
 with c1:
-    revision_no = st.text_input("Revision No.", value="01")
+    revision_no = st.text_input("Revision No.", key="revision_no", value="01")
 with c2:
-    issued_date = st.date_input("Issued Date", value=date.today())
+    issued_date = st.date_input("Issued Date", key="issued_date", value=date.today())
 
 # ============================================================
 # PART DETAILS
@@ -934,6 +967,7 @@ st.markdown(
 
 if st.button("📄 Generate PDF", type="primary", use_container_width=True):
     with st.spinner("Generating PDF..."):
+        save_suggestions(data)
         pdf_bytes = build_pdf(data)
         st.session_state["pdf_bytes"] = pdf_bytes
 

@@ -188,7 +188,7 @@ def create_pdf_report(report_data, photos):
                                  topMargin=0.55 * inch,
                                  bottomMargin=0.55 * inch)
     styles = getSampleStyleSheet()
-    content = [Paragraph("QUALITY REJECTION REPORT", styles["Title"]), Spacer(1, 0.2 * inch)]
+    content = [Paragraph("QUALITY REJECTION REPORT", styles["Title"]), Spacer(0.1, 0.2 * inch)]
 
     table_data = []
     for label, value in report_data.items():
